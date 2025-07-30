@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<sub-flow name="healthcheck" doc:id="7dfcbe1c-f9fe-4702-82f5-8cf8236d345f" >
+		<choice doc:name="Choice" doc:id="8c1e24ee-5212-44d4-8619-5fb6286195e1" >
+			<when expression='#[(attributes.queryParams.checkDependencies default "false") as Boolean == true]'>
+				<flow-ref doc:name="sfdc-getUserInfo" doc:id="89eec988-0955-4766-8dc0-3b87e89a0593" name="sfdc-getUserInfo"/>
+				<logger level="INFO" doc:name="SFDC Healthcheck SUCCESS" doc:id="5a5f198c-15b9-4abf-8476-6f68ac6d77d0" message="SFDC Healthcheck SUCCESS. #[payload]"/>
+				<set-variable value="#[output application/json&#10;&#10;---&#10;{&#10;      &quot;name&quot;: &quot;Salesforce&quot;,&#10;      &quot;status&quot;: if(p('external.sfdc.principal') == (payload.userName default &quot;&quot;)) &quot;UP&quot; else &quot;DOWN&quot;&#10;    }]" doc:name="dependencies status" doc:id="37166879-0c68-488c-8b09-be08ea83d5c4" variableName="dependencies"/>
+			</when>
+			<otherwise >
+				<set-variable value="#[[]]" doc:name="dependencies empty" doc:id="7eab7d7a-f833-45f2-85d9-59f0f09f07da" variableName="dependencies"/>
+			</otherwise>
+		</choice>
+		<ee:transform doc:name="Healthcheck" doc:id="4d8190fc-f876-4655-9cad-26fc10a9ca33">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+ status: "OK",
+ apiName: p("app.name"),
+ apiVersion: "V1",
+ timestamp: now(),
+ dependencies: [vars.dependencies]
+} as Object {encoding: "UTF-8", mediaType: "application/json"}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</sub-flow>
+</mule>
