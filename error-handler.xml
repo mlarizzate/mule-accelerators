@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:validation="http://www.mulesoft.org/schema/mule/validation"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mule/validation/current/mule-validation.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<sub-flow name="exception-handler-subflow" doc:id="32c680a8-0849-40d5-a176-c2e6278b8eca" >
+		<flow-ref doc:name="Log Error" doc:id="850533bd-ecf1-4a35-b9a6-2aadba549ad4" name="internal-common-error-handler-log-subflow" />
+		<try doc:name="Try" doc:id="ffd727bb-bff3-4730-a581-cbec2a1f293f" >
+			<validation:is-true doc:name="Is true" doc:id="35d527f5-8f0d-4c3e-bd0a-f88f87f10154" expression="#[error != null]" message="Missing error context. Make sure the error handler flow is being called in an error handler scope (On Error Propagate or On Error Continue)." />
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="a87a8e4c-2eed-4893-80d7-fc086fd6ca89" >
+					<raise-error doc:name="Raise error" doc:id="2e776678-d6d5-4948-8943-19ac6a38f943" type="APP:MISSING_ERROR_CONTEXT" description="#[error.description]" />
+				</on-error-continue>
+			</error-handler>
+		</try>
+		<ee:transform doc:name="Build Error Response" doc:id="32197ed9-e455-4775-9646-eb4594bd2f7f" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[output json skipNullOn="everywhere"
+import modules::errorHandler::ErrorUtils
+---
+if (ErrorUtils::isHandledError(payload))
+  payload
+else 
+	ErrorUtils::buildError(
+		vars.exceptionHandlerConfig, 
+		error, 
+		vars.operationContext,
+		vars.remoteCall, 
+		vars.requestConfig.transientErrors,
+		payload,
+		vars.correlationId default correlationId
+	)  
+]]></ee:set-payload>
+			</ee:message>
+			<ee:variables >
+			</ee:variables>
+		</ee:transform>
+		<logger level="DEBUG" doc:name="Logger" doc:id="d4694f53-29d0-461d-876e-088eb0721961" message="EXCEPTION HANDLER - Error Response: #[output json --- payload]" category="commons.errorHandler"/>
+		<choice doc:name="Choice" doc:id="13032fc6-9a12-4115-a0ed-fc17372741fe" >
+			<when expression="#[vars.exceptionHandlerConfig.raiseException default true]" >
+				<raise-error doc:name="Raise Application Exception" doc:id="385df56a-6489-4320-b153-a80e1a0e7339" type="APP:APPLICATION_EXCEPTION" description="#[payload.message]" />
+			</when>
+			<otherwise >
+				<logger level="DEBUG" doc:name="Logger" doc:id="d649d390-d54a-4054-84c7-df685f28cecf" message="Exception handler configured to not raise exception" category="commons.errorHandler"/>
+			</otherwise>
+		</choice>
+	</sub-flow>
+	<sub-flow name="internal-common-error-handler-log-subflow"
+		doc:id="3c43ddaa-58fc-461d-953b-578dc358793e">
+		<logger level="ERROR" doc:name="log error" doc:id="886db23a-6ed1-4ff1-ba5d-9add609c480d" message='#[%dw 2.0&#10;output application/json skipNullOn="everywhere"&#10;import modules::errorHandler::ErrorUtils&#10;import modules::errorHandler::ObjectUtils&#10;---&#10;{&#10; 	attributes: attributes,&#10; 	handledError: if (ObjectUtils::isObject(payload) and payload.code?) &#10; 		payload &#10; 		else null,&#10; 	causedBy: &#10; 		if (!isEmpty(error))&#10; 			ErrorUtils::cleanup(error)&#10;		else null,&#10;	context: {&#10;		operationContext: vars.operationContext,&#10;		remoteCall: vars.remoteCall&#10;	}	&#10;}]' category="commons.errorHandler"/>
+	</sub-flow>
+	<sub-flow name="raise-business-error-flow" doc:id="c30574ac-8c21-4bed-956e-fe22e27d1f44" >
+		<validation:is-true doc:name="Is true" doc:id="8cde2252-82cf-4733-b53d-c949d96849b1" expression="#[import modules::errorHandler::ObjectUtils --- (ObjectUtils::isObject(payload)) and (!isEmpty(payload.code)) and (!isEmpty(payload.message))]" message="Cannot raise business error: payload must be an object containing the 'code' and 'message' properties" />
+		<set-variable value="#[true]" doc:name="isBusinessError" doc:id="f53d5220-d6be-484a-9fe2-54ac16ce43e0" variableName="isBusinessError"/>
+		<flow-ref doc:name="Build Application Error" doc:id="ad3c3276-3486-4f5b-ac49-f9866dd0f618" name="internal-build-application-error-subflow"/>
+		<raise-error doc:name="Raise Business Error" doc:id="2beb6488-bd84-447a-ba6d-f3ca6fe3d09c" type="APP:BUSINESS" description="#[payload.message]" />
+	</sub-flow>
+	<sub-flow name="raise-technical-error-flow" doc:id="b0d1be60-ddb1-4c26-a692-7b9e15dcf5d5" >
+		<validation:is-true doc:name="Is true" doc:id="c51d0370-3061-44ac-be71-9d6e8388a83d" expression="#[import modules::errorHandler::ObjectUtils --- ObjectUtils::isObject(payload) and (!isEmpty(payload.message))]" message="Cannot raise technical error: payload must be an object containing at least the 'message' property" />
+		<flow-ref doc:name="Build Application Error" doc:id="57c122f3-4d27-418b-bf17-b747ff3206ac" name="internal-build-application-error-subflow"/>
+		<choice doc:name="Choice" doc:id="76cb9fbd-af6f-42a9-84e1-06c0ff86c82f" >
+			<when expression="#[payload.isTransient]" >
+				<raise-error doc:name="Raise Transient Error" doc:id="79383483-91d7-4627-b97c-825955226d64" type="APP:TRANSIENT" description="#[payload.message]" />
+			</when>
+			<otherwise >
+				<raise-error doc:name="Raise Technical Error" doc:id="611b13d8-1adf-4e7f-911a-20e452f7ef5c" type="APP:TECHNICAL" description="#[payload.message]" />
+			</otherwise>
+		</choice>
+	</sub-flow>
+	<sub-flow name="internal-build-application-error-subflow" doc:id="7ad19c8d-81f3-45e3-ba64-655aa46a211b" >
+		<ee:transform doc:name="Transform Message" doc:id="ade0bedc-5f84-4ff1-9e3f-c9cad5d2bc07">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+import modules::errorHandler::ErrorUtils
+import modules::errorHandler::ContextUtils
+
+var errorCause = 
+	if (vars.isBusinessError default false) 
+		null 
+	else 
+		(payload.causedBy default ErrorUtils::cleanup(error))
+		
+var isBusinessError = vars.isBusinessError default false		
+
+fun checkIfTransient(error) = do {
+  var transientErrors = vars.requestConfig.transientErrors default []
+  ---
+  //TODO olamiral: use LLM / RAG to determine if error is transient or not
+  transientErrors contains (error.errorType default "APP:UNKNOW")
+}
+
+
+// TODO olamiral: add logic to build causedBy when exists error.errorMessage.attributes.statusCode 
+//   - payload is a handled error
+//   - payload is not a handled error
+
+---
+{
+	code: payload.code default "500",
+	message: payload.message,
+	isBusinessError: isBusinessError,
+	isTransient: 
+		if (isBusinessError) null
+		else
+			(payload.isTransient default checkIfTransient(errorCause)),
+	details: payload.details,	
+	correlationId: payload.correlationId default correlationId,
+	timestamp: now() >> "UTC",
+	causedBy: errorCause,
+	context: if (isBusinessError) null
+		else ContextUtils::getContextFrom(vars.operationContext.name, vars.remoteCall) 
+
+} ]]></ee:set-payload>
+			</ee:message>
+			<ee:variables>
+				<ee:set-variable variableName="httpStatus"><![CDATA[500]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+	</sub-flow>
+		
+</mule>
