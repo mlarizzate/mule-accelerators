@@ -1,0 +1,6 @@
+remote:
+  http:
+    excludedRequestHeaders: "content-type, content-length, cookie, connection, host, mic_api_key, mic_channel"
+    excludedResponseHeaders: "accept, date, server, accept-encoding, client_id, client_secret, mic_api_key, x-anypnt-app-worker, x-consumer-groups, x-consumer-id, x-consumer-username, x-content-type-options, x-correlation-id, x-credential-identifier, x-forwarded-for, x-forwarded-host, x-forwarded-path, x-forwarded-port, x-forwarded-prefix, x-forwarded-proto, x-forwarded-server, x-real-ip, mic_transaction_id, mic_channel, mic_process_id, mic_route, mic_listener_channel, mic_additional_data, from, to, postman-token, x-client-ip"
+    transientStatusCodes: "408, 429, 502, 503, 504"
+    transientErrors: "HTTP:CONNECTIVITY, HTTP:SERVICE_UNAVAILABLE, HTTP:TIMEOUT, HTTP:BAD_GATEWAY, HTTP:GATEWAY_TIMEOUT"
