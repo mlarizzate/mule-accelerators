@@ -1,0 +1,479 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:salesforce-pub-sub="http://www.mulesoft.org/schema/mule/salesforce-pub-sub"
+	xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/salesforce-pub-sub http://www.mulesoft.org/schema/mule/salesforce-pub-sub/current/mule-salesforce-pub-sub.xsd">
+	<configuration-properties
+		doc:name="Configuration properties"
+		doc:id="b763b020-1a96-4bfd-bf50-bb271a7d8795"
+		file="config/commons-sfdc-client-default.yaml" />
+	<import doc:name="Import"
+		doc:id="4a8aa9e3-7286-4cbf-ab89-48551d2435dc"
+		file="commons-error-handler.xml" />
+	<import doc:name="Import"
+		doc:id="0dc5db89-8424-4d59-b4de-944ac0fa8e5f"
+		file="commons-tracking.xml" />
+	<salesforce:sfdc-config name="Commons_Salesforce_Config" doc:name="Salesforce Config" doc:id="9840c53b-1400-4198-89a8-36ea237a35ac" >
+		<salesforce:jwt-connection consumerKey="#[vars.requestConfig.consumerKey]" keyStore="#[vars.requestConfig.keyStorePath]" storePassword="#[vars.requestConfig.keyStorePassword]" certificateAlias="#[vars.requestConfig.certAlias]" principal="#[vars.requestConfig.principal]" tokenEndpoint="#[vars.requestConfig.tokenEndpoint]" audienceUrl="#[vars.requestConfig.audienceUrl]" />
+	</salesforce:sfdc-config>
+	<salesforce-pub-sub:pubsub-config name="Commons_Salesforce_PubSub_Config" doc:name="Salesforce PubSub Config" doc:id="a11c2d93-0eee-457e-8c68-f4e303adff32" >
+		<salesforce-pub-sub:jwt-connection consumerKey="#[vars.requestConfig.consumerKey]" keyStore="#[vars.requestConfig.keyStorePath]" storePassword="#[vars.requestConfig.keyStorePassword]" certificateAlias="#[vars.requestConfig.certAlias]" principal="#[vars.requestConfig.principal]" tokenEndpoint="#[vars.requestConfig.tokenEndpoint]" audienceUrl="#[vars.requestConfig.audienceUrl]" host="#[vars.requestConfig.gRPCHost]" port="#[vars.requestConfig.gRPCPort]"/>
+	</salesforce-pub-sub:pubsub-config>
+	<sub-flow name="invoke-sfdc-rest-apex-subflow" doc:id="ed153183-ad62-4f46-936d-a5a55d480c5d" >
+		<set-variable value='#[{&#10;	name: "invokeApexRestMethod",&#10;    configProperties: {&#10;	    required: [&#10;			"apexClass",&#10;			"apexClassMethod"&#10;		]&#10;    }&#10;}]' doc:name="sfdcOperation" doc:id="2fc51714-cb93-42d5-b76a-112e34f8a46b" variableName="sfdcOperation"/>
+		<flow-ref doc:name="Load Request Config" doc:id="b1a7c7b7-1de5-4845-9109-a052c511d51c" name="internal-load-sfdc-request-config-subflow" />
+		<try doc:name="Try" doc:id="212febf2-46a9-403c-83d0-5fad82344669" >
+			<flow-ref doc:name="Before SFDC Operation" doc:id="163e2876-bc06-44d2-b917-47747b7f0f98" name="internal-before-sfdc-operation-call-subflow"/>
+			<salesforce:invoke-apex-rest-method doc:name="Invoke apex rest method" doc:id="fc1f3134-37e8-40f4-baff-0cfa0efd61a1" config-ref="Commons_Salesforce_Config" className="#[vars.requestConfig.apexClass]" methodName="#[vars.requestConfig.apexClassMethod]" />
+			<flow-ref doc:name="After SFDC Operation" doc:id="8e0dad7e-0c21-4ee4-b2ac-31cfc526261e" name="internal-after-sfdc-operation-call-subflow"/>
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="1229a99b-f2bc-4f6b-a29f-5614633182fc" >
+					<flow-ref doc:name="Raise SFDC Operation Technical Error" doc:id="7e420acd-9483-4781-b135-f0d6143e544e" name="internal-raise-sfdc-operation-technical-error-subflow"/>
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow>
+	<sub-flow name="invoke-sfdc-soap-apex-subflow" doc:id="4382a26d-e380-47f7-bb1b-21b7fdb90b28" >
+		<set-variable value='#[{&#10;	name: "invokeApexSoapMethod",&#10;	configProperties: {&#10;		required: [&#10;			"apexClass",&#10;			"apexClassMethod"&#10;		]&#10;	}&#10;}]' doc:name="sfdcOperation" doc:id="ee156f86-089f-43c6-b795-1df15e3b73fd" variableName="sfdcOperation" />
+		<flow-ref doc:name="Load Request Config" doc:id="85f45612-c4f3-4097-8867-af7cee1f9145" name="internal-load-sfdc-request-config-subflow" />
+		<try doc:name="Try" doc:id="221b3c4a-3dec-435d-bb7c-a61a531b1895" >
+			<flow-ref doc:name="Before SFDC Operation" doc:id="8b0175b1-614c-4c76-8b33-4bd84c1ed60b" name="internal-before-sfdc-operation-call-subflow" />
+			<salesforce:invoke-apex-soap-method doc:name="Invoke apex soap method" doc:id="85b0d6b1-6a56-4044-824c-cdf28fd91113" config-ref="Commons_Salesforce_Config" className="#[vars.requestConfig.apexClass]" methodName="#[vars.requestConfig.apexClassMethod]"/>
+			<flow-ref doc:name="After SFDC Operation" doc:id="a4a97512-8ad1-4f4d-b8d2-59661f813e89" name="internal-after-sfdc-operation-call-subflow" />
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="f02b9dbc-f86a-45d1-b15d-ef851c08ca4a" >
+					<flow-ref doc:name="Raise SFDC Operation Technical Error" doc:id="37fcfbb1-12ed-49e0-9f79-a9b0c919a475" name="internal-raise-sfdc-operation-technical-error-subflow" />
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow>
+	<sub-flow name="execute-sfdc-query-subflow" doc:id="3bae60ab-df6c-4501-a90f-f82cb0c99366" >
+		<set-variable value='#[{&#10;	name: "query",&#10;	configProperties: {&#10;		required: [&#10;			"query"			&#10;		]&#10;	},&#10;	remoteCallProperties: {&#10;		optional: [&#10;			"soqlQueryParams"&#10;		]&#10;	}&#10;}]' doc:name="sfdcOperation" doc:id="34c8e8d6-68a2-46a9-891d-6119321457c2" variableName="sfdcOperation" />
+		<flow-ref doc:name="Load Request Config" doc:id="ab675f04-9e06-42b5-b040-1903b39e3252" name="internal-load-sfdc-request-config-subflow" />
+		<try doc:name="Try" doc:id="3e9e8ab3-e587-4e23-a241-c2a56fa01650" >
+			<flow-ref doc:name="Before SFDC Operation" doc:id="2e91fcc2-7cd8-415d-9b80-ec9379129949" name="internal-before-sfdc-operation-call-subflow" />
+			<salesforce:query doc:name="Query" doc:id="93560010-7397-4896-91c2-969a25e3163a" config-ref="Commons_Salesforce_Config" >
+				<salesforce:salesforce-query ><![CDATA[#[vars.requestConfig.query]]]></salesforce:salesforce-query>
+				<salesforce:parameters ><![CDATA[#[output application/java
+---
+vars.remoteCall.requestConfig.soqlQueryParams default {}]]]></salesforce:parameters>
+			</salesforce:query>
+			<flow-ref doc:name="After SFDC Operation" doc:id="650fad4f-1a3e-4721-8462-26022171e457" name="internal-after-sfdc-operation-call-subflow" />
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="6b2cb3dc-6085-4793-8ed6-8df79a5f5438" >
+					<flow-ref doc:name="Raise SFDC Operation Technical Error" doc:id="ddaa4d21-e5d5-443e-9809-5b0abccd36ce" name="internal-raise-sfdc-operation-technical-error-subflow" />
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow>
+	<sub-flow name="create-sfdc-records-subflow" doc:id="7de38afb-893d-48a7-aaa9-eabf1c46ac78" >
+		<set-variable value='#[{&#10;	name: "create",&#10;    configProperties: {&#10;    	required: [&#10;    		"objectType"&#10;    	],&#10;    }&#10;}]' doc:name="sfdcOperation" doc:id="f60d4a1d-fc6e-4c9b-ab4d-1125e522364a" variableName="sfdcOperation" />
+		<flow-ref doc:name="Load Request Config" doc:id="d2e484c7-27bb-4113-afb8-58049811d5a8" name="internal-load-sfdc-request-config-subflow" />
+		<try doc:name="Try" doc:id="3bc72450-ff2f-46a5-9a82-2b39f9a9497a" >
+			<flow-ref doc:name="Before SFDC Operation" doc:id="eea999ae-aed5-47f4-8e52-067533cbe8c0" name="internal-before-sfdc-operation-call-subflow" />
+			<salesforce:create doc:name="Create" doc:id="9b179dfb-bc60-4610-baf0-7be60513aa32" config-ref="Commons_Salesforce_Config" type="#[vars.requestConfig.objectType]"/>
+			<flow-ref doc:name="After SFDC Operation" doc:id="8b251779-0b9f-40f5-9e38-efa352fb15ff" name="internal-after-sfdc-operation-call-subflow" />
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="441f3eb1-aa7f-468c-8a34-e75de0a5e81d" >
+					<flow-ref doc:name="Raise SFDC Operation Technical Error" doc:id="40d1bfee-d7ad-416b-b962-7e0f618bdcdf" name="internal-raise-sfdc-operation-technical-error-subflow" />
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow>
+	<sub-flow name="update-sfdc-records-subflow" doc:id="dec36b4d-5eb7-4fc6-92e9-5028dea3e37d">
+		<set-variable value='#[{&#10;	name: "update",&#10;    configProperties: {&#10;    	required: [&#10;    		"objectType"]&#10;    }&#10;}]' doc:name="sfdcOperation" doc:id="ef58f6db-d630-40cd-875c-5b6f56ca6535" variableName="sfdcOperation" />
+		<flow-ref doc:name="Load Request Config" doc:id="acce5ef2-17bd-4a4d-8361-03e2019a3eed" name="internal-load-sfdc-request-config-subflow" />
+		<try doc:name="Try" doc:id="5f1c9713-607a-4dd3-adc3-d2fb02ce32bf" >
+			<flow-ref doc:name="Before SFDC Operation" doc:id="d794f1a6-944d-4111-9536-85bd330f6185" name="internal-before-sfdc-operation-call-subflow" />
+			<salesforce:update doc:name="Update" doc:id="587f92bd-a785-4710-ba43-437dab5af18d" config-ref="Commons_Salesforce_Config" type="#[vars.requestConfig.objectType]"/>
+			<flow-ref doc:name="After SFDC Operation" doc:id="b1e8780a-ca75-4860-a59b-512f2f829c60" name="internal-after-sfdc-operation-call-subflow" />
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="b705e701-2ece-4f9d-88b9-eee5dcd3ed38" >
+					<flow-ref doc:name="Raise SFDC Operation Technical Error" doc:id="f483151f-f255-4546-9ad2-347000c0af39" name="internal-raise-sfdc-operation-technical-error-subflow" />
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow>
+	<sub-flow name="upsert-sfdc-records-subflow" doc:id="7b03666d-11ad-4b42-a370-065f0f109491" >
+		<set-variable value='#[{&#10;	name: "upsert",&#10;    configProperties: {&#10;    	required: [&#10;			"objectType",&#10;			"externalIdFieldName"		    		&#10;    	]&#10;    }&#10;}]' doc:name="sfdcOperation" doc:id="960fe19a-a67e-46dd-a8f4-b736ee393521" variableName="sfdcOperation" />
+		<flow-ref doc:name="Load Request Config" doc:id="4c6c4734-2710-4185-acd7-27200e3e6b9f" name="internal-load-sfdc-request-config-subflow" />
+		<try doc:name="Try" doc:id="8ad54f1a-5d14-47cc-a2d9-8208044e2d70" >
+			<flow-ref doc:name="Before SFDC Operation" doc:id="a1c76c2e-7820-481a-8fa5-e259c6a37a36" name="internal-before-sfdc-operation-call-subflow" />
+			<salesforce:upsert doc:name="Upsert" doc:id="4d5219f8-037b-4dd6-98fd-e7cc7592b562" config-ref="Commons_Salesforce_Config" objectType="#[vars.requestConfig.objectType]" externalIdFieldName="#[vars.requestConfig.externalIdFieldName]"/>
+			<flow-ref doc:name="After SFDC Operation" doc:id="d26bc3b9-a18a-4007-a06a-51127f070c0d" name="internal-after-sfdc-operation-call-subflow" />
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="3dcab661-f5be-4ec5-a080-d104f3e6dfac" >
+					<flow-ref doc:name="Raise SFDC Operation Technical Error" doc:id="e4b72783-2410-4d2c-bd5e-9f90cc28accd" name="internal-raise-sfdc-operation-technical-error-subflow" />
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow>
+	<sub-flow name="delete-sfdc-records-subflow" doc:id="2a30dc5a-57fe-4485-9ab1-ecee91f302a2" >
+		<set-variable value='#[{&#10;	name: "delete",&#10;}]' doc:name="sfdcOperation" doc:id="7976443b-5f00-4af8-b992-072eda295ec6" variableName="sfdcOperation" />
+		<flow-ref doc:name="Load Request Config" doc:id="9ab2ac79-d24b-4aa2-87b3-e823daa1c64a" name="internal-load-sfdc-request-config-subflow" />
+		<try doc:name="Try" doc:id="1588978b-40fa-48fc-8bf0-89dd1deb536d" >
+			<flow-ref doc:name="Before SFDC Operation" doc:id="8f571111-213b-4651-9260-3ff3864ebabc" name="internal-before-sfdc-operation-call-subflow" />
+			<salesforce:delete doc:name="Delete" doc:id="0f9e039d-b48d-4a3d-a1e2-187c2027115a" config-ref="Commons_Salesforce_Config" />
+			<flow-ref doc:name="After SFDC Operation" doc:id="d7754866-f62c-43f2-ab12-c746f667562b" name="internal-after-sfdc-operation-call-subflow" />
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="f8837eb4-63c0-41f7-ad76-274c558aa489" >
+					<flow-ref doc:name="Raise SFDC Operation Technical Error" doc:id="10cad97e-1050-40a2-8abd-57aa8b58ddf1" name="internal-raise-sfdc-operation-technical-error-subflow" />
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow>
+	<sub-flow name="retrieve-sfdc-records-subflow" doc:id="d2808ebb-a3a6-4b8f-a04c-077b8669f0aa" >
+		<set-variable value='#[{&#10;	name: "retrieve",&#10;    configProperties: {&#10;    	required: [&#10;    		"objectType"&#10;    	]&#10;    }&#10;}]' doc:name="sfdcOperation" doc:id="74bfaa9e-40e2-45a1-9d09-120e47d4d37b" variableName="sfdcOperation" />
+		<flow-ref doc:name="Load Request Config" doc:id="17174c8b-bfcd-4edd-b3f6-835413889a2c" name="internal-load-sfdc-request-config-subflow" />
+		<try doc:name="Try" doc:id="cf44b971-2775-4e83-baaf-eba1409af1c2" >
+			<flow-ref doc:name="Before SFDC Operation" doc:id="df7b38b5-107b-459d-aa60-842aa1715470" name="internal-before-sfdc-operation-call-subflow" />
+			<salesforce:retrieve doc:name="Retrieve" doc:id="c4e46c6e-71a7-406e-b24e-f25b7fb819f4" config-ref="Commons_Salesforce_Config" type="#[vars.requestConfig.objectType]"/>
+			<flow-ref doc:name="After SFDC Operation" doc:id="70aa3e77-3d80-4791-bedc-508da826d379" name="internal-after-sfdc-operation-call-subflow" />
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="b61adcf7-7816-4dd5-9695-3515a2b255ab" >
+					<flow-ref doc:name="Raise SFDC Operation Technical Error" doc:id="d75dc89b-6e35-40cd-bf00-b6219e0b4bd4" name="internal-raise-sfdc-operation-technical-error-subflow" />
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow>
+	<sub-flow name="publish-sfdc-platform-event-subflow" doc:id="0069f002-0c98-482a-9e3c-e7d03ffc05b8" >
+		<set-variable value='#[{&#10;	name: "publishPlatformEventMessage",&#10;    configProperties: {&#10;    	required: [&#10;    		"platformEventName"&#10;    	]&#10;    }&#10;}]' doc:name="sfdcOperation" doc:id="84d724d7-1580-481b-a280-b9622b39fd71" variableName="sfdcOperation" />
+		<flow-ref doc:name="Load Request Config" doc:id="7eeb0b53-1349-4357-981b-2e9a7f5257b1" name="internal-load-sfdc-request-config-subflow" />
+		<try doc:name="Try" doc:id="f33b48ce-c421-4af6-ab0c-3c88f082632f" >
+			<flow-ref doc:name="Before SFDC Operation" doc:id="af4d813d-c093-48da-8507-da97cb09d065" name="internal-before-sfdc-operation-call-subflow" />
+			<salesforce:publish-platform-event-message doc:name="Publish platform event message" doc:id="2cbe4c55-30d7-4fa1-ac92-8f91237a83ec" config-ref="Commons_Salesforce_Config" platformEventName="#[vars.requestConfig.platformEventName]"/>
+			<flow-ref doc:name="After SFDC Operation" doc:id="7116e9e8-b693-4675-9caa-558eb600b267" name="internal-after-sfdc-operation-call-subflow" />
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="9a93670f-8914-4ee8-a13c-aa015328ceaa" >
+					<flow-ref doc:name="Raise SFDC Operation Technical Error" doc:id="4b136ea2-32d7-4d61-82e4-02c79f566c94" name="internal-raise-sfdc-operation-technical-error-subflow" />
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow>
+	<sub-flow name="publish-sfdc-pubsub-event-subflow" doc:id="0ddbb7a3-554e-4f90-abc4-db5bdcdd026b" >
+		<set-variable value='#[{&#10;	name: "publishEvent",&#10;    configProperties: {&#10;    	required: [&#10;    		"topic"&#10;    	]&#10;    }&#10;}]' doc:name="sfdcOperation" doc:id="06e2c5ca-d9a6-4af7-aafb-0322f6b9d659" variableName="sfdcOperation" />
+		<flow-ref doc:name="Load Request Config" doc:id="495759de-6326-4af9-ac12-ac1f26d78f6e" name="internal-load-sfdc-request-config-subflow" />
+		<try doc:name="Try" doc:id="52254c2f-9768-491b-abe8-f85f29259f4b" >
+			<flow-ref doc:name="Before SFDC Operation" doc:id="7978619b-09a9-43d7-8e55-d9df7190108b" name="internal-before-sfdc-operation-call-subflow" />
+			<salesforce-pub-sub:publish-event doc:name="Publish event" doc:id="4a24186c-046e-4430-b50f-2cb6e39c2b84" config-ref="Commons_Salesforce_PubSub_Config" topic="#[vars.requestConfig.topic]"/>
+			<flow-ref doc:name="After SFDC Operation" doc:id="fa6014f9-d951-4c93-a1d8-d83b1469c65f" name="internal-after-sfdc-operation-call-subflow" />
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="470b57ff-5f9f-43e5-8179-e1f8d58deee3" >
+					<flow-ref doc:name="Raise SFDC Operation Technical Error" doc:id="46378db3-b9df-4635-8794-022e34368abe" name="internal-raise-sfdc-operation-technical-error-subflow" />
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow>
+	<sub-flow name="get-sfdc-user-info-subflow" doc:id="2142b91e-e327-4516-8085-da2e4cd15785" >
+		<set-variable value='#[{&#10;	name: "getUserInfo"&#10;}]' doc:name="sfdcOperation" doc:id="6dc3fbc7-3a11-4d53-b39d-1b46cac8aa36" variableName="sfdcOperation" />
+		<flow-ref doc:name="Load Request Config" doc:id="5991f257-0eb7-4e6a-9e12-4de730025a46" name="internal-load-sfdc-request-config-subflow" />
+		<try doc:name="Try" doc:id="b08d2d20-5df3-4f17-b3fd-dc4b2aab4c92" >
+			<flow-ref doc:name="Before SFDC Operation" doc:id="2c999dfb-ac2b-4d02-a27b-e98a7318c618" name="internal-before-sfdc-operation-call-subflow" />
+			<salesforce:get-user-info doc:name="Get user info" doc:id="ea138550-2ad6-43e0-bcfd-b6bb29193793" config-ref="Commons_Salesforce_Config" />
+			<flow-ref doc:name="After SFDC Operation" doc:id="127dcb48-baf4-43db-b45d-37443c1239e2" name="internal-after-sfdc-operation-call-subflow" />
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="5679215c-1bc8-409b-a227-99f586637e3f" >
+					<flow-ref doc:name="Raise SFDC Operation Technical Error" doc:id="8239517e-ec4a-46cc-a80b-5dce2685cfcf" name="internal-raise-sfdc-operation-technical-error-subflow" />
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow>
+	<sub-flow name="create-sfdc-job-bulk-api-v2-subflow" doc:id="2ab379da-7289-4e16-8858-8e2f9ffcd466" >
+		<set-variable value='#[{&#10;	name: "createJobBulkApiV2",&#10;    configProperties: {&#10;    	required: [&#10;			"objectType",&#10;			"operation"		    		&#10;    	],&#10;    	optional: [&#10;			"lineEnding",&#10;			"columnDelimiter",&#10;			"assignmentRuleId",&#10;			"externalIdFieldName"		&#10;    	]&#10;    }&#10;}]' doc:name="sfdcOperation" doc:id="3f84452f-9e20-4e22-8c13-8a6ee9e601d2" variableName="sfdcOperation" />
+		<flow-ref doc:name="Load Request Config" doc:id="9ce4c96b-0d0c-4cf7-96e9-8dc5292a62d4" name="internal-load-sfdc-request-config-subflow" />
+		<try doc:name="Try" doc:id="35fa5f3b-06a8-4b19-a666-2b80ee990b62" >
+			<flow-ref doc:name="Before SFDC Operation" doc:id="3019580b-45c6-42ff-842d-70286714dd0d" name="internal-before-sfdc-operation-call-subflow" />
+			<salesforce:create-job-bulk-api-v2 doc:name="Create job bulk api v 2" doc:id="14848fa4-177e-4d67-996a-c8d891e171c3" config-ref="Commons_Salesforce_Config" objectType="#[vars.requestConfig.objectType]" operation="#[vars.requestConfig.operation]" lineEnding='#[vars.requestConfig.lineEnding default "LF"]' columnDelimiter='#[vars.requestConfig.columnDelimiter default "COMMA"]' assignmentRuleId='#[vars.requestConfig.assignmentRuleId default ""]' externalIdFieldName="#[vars.requestConfig.externalIdFieldName]"/>
+			<flow-ref doc:name="After SFDC Operation" doc:id="64c04d2e-cf19-4500-8795-f858271a3168" name="internal-after-sfdc-operation-call-subflow" />
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="38968082-5fc5-4f88-bed2-a8f4c5482b2e" >
+					<flow-ref doc:name="Raise SFDC Operation Technical Error" doc:id="679195ae-25e5-47d8-99fb-43141df6dcdf" name="internal-raise-sfdc-operation-technical-error-subflow" />
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow>
+	<sub-flow name="abort-sfdc-job-bulk-api-v2-subflow" doc:id="dc84b71b-9e03-427d-ad13-868708963ad5" >
+		<set-variable value='#[{&#10;	name: "abortJobBulkApiV2",&#10;    remoteCallProperties: {&#10;    	required: [&#10;    		"jobId"&#10;    	]&#10;    }&#10;}]' doc:name="sfdcOperation" doc:id="aaa386c0-dd52-48fa-a13e-a21cb2ae9c1f" variableName="sfdcOperation" />
+		<flow-ref doc:name="Load Request Config" doc:id="d2fe2dcb-92e0-4997-9449-5e873d5ceca3" name="internal-load-sfdc-request-config-subflow" />
+		<try doc:name="Try" doc:id="c8e65d6d-a339-4d4a-b9ce-f8eba5800f99" >
+			<flow-ref doc:name="After SFDC Operation" doc:id="649e3ab0-d4ff-41e2-b9ac-bb7180045329" name="internal-after-sfdc-operation-call-subflow" />
+			<salesforce:abort-job-bulk-api-v2 doc:name="Abort job bulk api v 2" doc:id="0fcdba8f-6e14-4874-8bba-409e236dfaee" config-ref="Commons_Salesforce_Config" id="#[vars.remoteCall.requestConfig.jobId]"/>
+			<flow-ref doc:name="Before SFDC Operation" doc:id="1e894db2-ef6f-4685-9fc5-90ccf1becb33" name="internal-before-sfdc-operation-call-subflow" />
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="86e127d6-b856-48e2-920b-a547f0bde9ca" >
+					<flow-ref doc:name="Raise SFDC Operation Technical Error" doc:id="d6514208-cf22-4e07-9cec-613d0d0c1cfa" name="internal-raise-sfdc-operation-technical-error-subflow" />
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow>
+	<sub-flow name="delete-sfdc-job-bulk-api-v2-subflow" doc:id="065db38c-257f-469e-8bf2-d810ccb5106e" >
+		<set-variable value='#[{&#10;	name: "deleteJobBulkApiV2",&#10;    remoteCallProperties: {&#10;    	required: [&#10;			"jobId"    		&#10;    	]&#10;    }&#10;}]' doc:name="sfdcOperation" doc:id="0e10e3c2-3529-4c58-a1ce-bf3187fd2d84" variableName="sfdcOperation" />
+		<flow-ref doc:name="Load Request Config" doc:id="654dd8c1-51a8-4775-897b-21b484defc25" name="internal-load-sfdc-request-config-subflow" />
+		<try doc:name="Try" doc:id="0e9a4081-d98c-4c40-83a4-2be0267e4c7c" >
+			<flow-ref doc:name="Before SFDC Operation" doc:id="4a09e531-a6bd-48fc-9fc8-53c385c7537f" name="internal-before-sfdc-operation-call-subflow" />
+			<salesforce:delete-job-bulk-api-v2 doc:name="Delete job bulk api v 2" doc:id="180de668-093b-4a7f-9099-ebfec275d6a0" config-ref="Commons_Salesforce_Config" id="#[vars.remoteCall.requestConfig.jobId]"/>
+			<flow-ref doc:name="After SFDC Operation" doc:id="53f781de-afba-4dc3-82b4-887f2f3aea19" name="internal-after-sfdc-operation-call-subflow" />
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="dcc3e411-9c09-4288-93ca-b45bfc2c01db" >
+					<flow-ref doc:name="Raise SFDC Operation Technical Error" doc:id="b962e3fe-8d7e-457f-9ff6-66533dc43fd6" name="internal-raise-sfdc-operation-technical-error-subflow" />
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow>
+	<sub-flow name="get-all-sfdc-jobs-bulk-api-v2-subflow" doc:id="cbe03ac9-98c1-4ae3-acc2-136250289268" >
+		<set-variable value='#[{&#10;	name: "getAllJobBulkApiV2"&#10;}]' doc:name="sfdcOperation" doc:id="9dfe467e-2e96-4b7f-bfcd-ffb9e78f94bd" variableName="sfdcOperation" />
+		<flow-ref doc:name="Load Request Config" doc:id="f3ddff29-14c0-442d-b23c-48b416e94776" name="internal-load-sfdc-request-config-subflow" />
+		<try doc:name="Try" doc:id="d42a8246-c1f2-4b6a-8a06-6e5e0b26a996" >
+			<flow-ref doc:name="Before SFDC Operation" doc:id="7b2c5ebc-3fa1-4635-b0d0-49e03be94bf7" name="internal-before-sfdc-operation-call-subflow" />
+			<salesforce:get-all-jobs-bulk-api-v2 doc:name="Get all jobs bulk api v 2" doc:id="2d324f92-1da7-47b3-92b8-68e7c0249b14" config-ref="Commons_Salesforce_Config" />
+			<flow-ref doc:name="After SFDC Operation" doc:id="e1aa6513-29b4-4061-86f6-2d320350019b" name="internal-after-sfdc-operation-call-subflow" />
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="52de0b0e-d092-4e14-b7f5-f83e738f52ee" >
+					<flow-ref doc:name="Raise SFDC Operation Technical Error" doc:id="9f048bb7-0bc5-4f70-bcb5-7a1aa4714a35" name="internal-raise-sfdc-operation-technical-error-subflow" />
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow>
+	<sub-flow name="get-sfdc-job-state-bulk-api-v2-subflow" doc:id="732eacd8-3867-450b-bec6-b6c1c8fc61ae" >
+		<set-variable value='#[{&#10;	name: "getJobStateBulkApiV2",&#10;    remoteCallProperties: {&#10;    	required: ["jobId"]&#10;    }&#10;}]' doc:name="sfdcOperation" doc:id="4901790f-c815-43dc-9905-59a3cafe0e0d" variableName="sfdcOperation" />
+		<flow-ref doc:name="Load Request Config" doc:id="e0158116-ab52-4a93-a05c-4766298d27f2" name="internal-load-sfdc-request-config-subflow" />
+		<try doc:name="Try" doc:id="4faede71-d189-47cc-93ae-39d12458ee1b" >
+			<flow-ref doc:name="Before SFDC Operation" doc:id="dd513d71-d6be-4455-b754-1741cc6587d7" name="internal-before-sfdc-operation-call-subflow" />
+			<salesforce:get-job-state-bulk-api-v2 doc:name="Get job state bulk api v 2" doc:id="679058e6-635a-4532-878f-0bab412b84e9" config-ref="Commons_Salesforce_Config" id="#[vars.remoteCall.requestConfig.jobId]"/>
+			<flow-ref doc:name="After SFDC Operation" doc:id="39981b11-1d98-46ff-8d77-29ea5cb0dd25" name="internal-after-sfdc-operation-call-subflow" />
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="86e3c889-8427-4871-9c17-e8d05a56b6e9" >
+					<flow-ref doc:name="Raise SFDC Operation Technical Error" doc:id="651d2337-e747-4724-ae16-44b0ad0e9fd7" name="internal-raise-sfdc-operation-technical-error-subflow" />
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow>
+	<sub-flow name="retrieve-sfdc-job-failed-results-bulk-api-v2-subflow" doc:id="d17e235e-f93f-4a38-bc43-621644fbb919" >
+		<set-variable value='#[{&#10;	name: "retrieveJobFailedResultsBulkApiV2",&#10;    remoteCallProperties: {&#10;    	required: ["jobId"]&#10;    }&#10;}]' doc:name="sfdcOperation" doc:id="a6b75e89-d2b0-481d-8946-5f2e46941688" variableName="sfdcOperation" />
+		<flow-ref doc:name="Load Request Config" doc:id="1b47735e-c158-4245-a414-38c4575ecc08" name="internal-load-sfdc-request-config-subflow" />
+		<try doc:name="Try" doc:id="4e3676c2-fdb4-4d74-8823-490315422c9f" >
+			<flow-ref doc:name="Before SFDC Operation" doc:id="98128d06-89b0-4764-9675-7ac34df567f3" name="internal-before-sfdc-operation-call-subflow" />
+			<salesforce:retrieve-job-failed-results-bulk-v2 doc:name="Retrieve job failed results bulk v 2" doc:id="8562721b-a092-4f4f-9ed2-8a6081789fe7" config-ref="Commons_Salesforce_Config" id="#[vars.remoteCall.requestConfig.jobId]"/>
+			<flow-ref doc:name="After SFDC Operation" doc:id="85587a81-d497-4372-a227-ead6ffdc8541" name="internal-after-sfdc-operation-call-subflow" />
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="2e09f57d-1adc-42a5-825b-6f37b2159384" >
+					<flow-ref doc:name="Raise SFDC Operation Technical Error" doc:id="cb0ad4b0-913f-4499-ba43-320e682290df" name="internal-raise-sfdc-operation-technical-error-subflow" />
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow>
+	<sub-flow name="retrieve-sfdc-job-successful-results-bulk-api-v2-subflow" doc:id="bff84225-321c-48e6-a024-9233ab0007cc" >
+		<set-variable value='#[{&#10;	name: "retrieveJobSuccessfulResultsBulkApiV2",&#10;    remoteCallProperties: {&#10;    	required: ["jobId"]&#10;    }&#10;}]' doc:name="sfdcOperation" doc:id="b5f43dac-a78a-482f-84b2-f827e834f1a1" variableName="sfdcOperation" />
+		<flow-ref doc:name="Load Request Config" doc:id="ecb7b6e6-a1f9-4f07-b904-f7dd44fdfcc1" name="internal-load-sfdc-request-config-subflow" />
+		<try doc:name="Try" doc:id="c7172d87-eac2-4e77-8595-26cec737cb5e" >
+			<flow-ref doc:name="Before SFDC Operation" doc:id="32741fc1-04bf-473a-a5f1-890ccc2402cb" name="internal-before-sfdc-operation-call-subflow" />
+			<salesforce:retrieve-job-successful-results-bulk-v2 doc:name="Retrieve job successful results bulk v 2" doc:id="a6d49888-0ace-4b85-b7dd-78d8f4abe719" config-ref="Commons_Salesforce_Config" id="#[vars.remoteCall.requestConfig.jobId]"/>
+			<flow-ref doc:name="After SFDC Operation" doc:id="b37017be-bb09-4fce-991f-a2bd1a68f04a" name="internal-after-sfdc-operation-call-subflow" />
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="a7778790-1fa0-4dfc-b8fd-d2334616822b" >
+					<flow-ref doc:name="Raise SFDC Operation Technical Error" doc:id="e880a403-3570-426c-9663-eb6f30d1b26c" name="internal-raise-sfdc-operation-technical-error-subflow" />
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow>
+	<sub-flow name="retrieve-sfdc-job-unprocessed-results-bulk-api-v2-subflow" doc:id="fdca440c-1b29-43fa-a860-5d3cd0d400b9" >
+		<set-variable value='#[{&#10;	name: "retrieveJobUnprocessedResultsBulkApiV2",&#10;    remoteCallProperties: {&#10;    	required: ["jobId"]&#10;    }&#10;}]' doc:name="sfdcOperation" doc:id="d5c0c01b-e7cf-49c9-9c06-3c02fdfb7416" variableName="sfdcOperation" />
+		<flow-ref doc:name="Load Request Config" doc:id="81915a4e-2994-42a0-9e0c-141f4b6b1c4c" name="internal-load-sfdc-request-config-subflow" />
+		<try doc:name="Try" doc:id="cfb4528c-6278-4d8a-a4fe-1b9bfc3fc49e" >
+			<flow-ref doc:name="Before SFDC Operation" doc:id="6975f0f0-068d-4527-8dcb-7936b3bc0aca" name="internal-before-sfdc-operation-call-subflow" />
+			<salesforce:retrieve-job-unprocessed-results-bulk-v2 doc:name="Retrieve job unprocessed results bulk v 2" doc:id="6767478c-720a-4b48-856b-496dc695168b" config-ref="Commons_Salesforce_Config" id="#[vars.remoteCall.requestConfig.jobId]"/>
+			<flow-ref doc:name="After SFDC Operation" doc:id="0dfbe2e4-b830-4a28-8cf9-d69b58024490" name="internal-after-sfdc-operation-call-subflow" />
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="9377ab6a-a96d-49dc-ac9e-ed5b76e9a10e" >
+					<flow-ref doc:name="Raise SFDC Operation Technical Error" doc:id="1cf12496-69c8-4b06-823a-08d51f1cb5a2" name="internal-raise-sfdc-operation-technical-error-subflow" />
+				</on-error-continue>
+			</error-handler>
+		</try>
+	</sub-flow>
+	<sub-flow name="internal-load-sfdc-request-config-subflow" doc:id="40ac9932-d611-4483-9ca9-d2ea1342ae86" >
+		<logger level="DEBUG" doc:name="Logger" doc:id="35f9cc2e-7633-40cf-af1e-79a851340a0a" message="Loading request confguration for Salesforce operation: #[output json --- {sfdcOperation: vars.sfdcOperation, operationContext: vars.operationContext, remoteCall: vars.remoteCall}]" category="commons.sfdcClient" />
+		<set-variable value="#[import * from modules::sfdcClient::ValidationUtils&#10;---&#10;validateRemoteCallProperties(vars.operationContext, vars.sfdcOperation, vars.remoteCall)]" doc:name="validationResult" doc:id="31fc10ab-d17f-4d8c-99cd-5b9292fc0f4c" variableName="validationResult" />
+		<logger level="DEBUG" doc:name="Logger" doc:id="139c6154-6115-40bf-9a2e-8d4290ca8d70" message="Validation result: #[output json --- vars.validationResult]" category="commons.sfdcClient" />
+		<choice doc:name="Choice" doc:id="4c288ab5-67b0-43db-9665-4113b73e8355">
+			<when expression="#[!vars.validationResult.isValid]">
+				<raise-error doc:name="Raise APP:INVALID_REMOTE_CALL" doc:id="77751614-1d73-4657-af9a-37158b51a7ed" type="APP:INVALID_REMOTE_CALL" description='#[vars.validationResult.message]' />
+			</when>
+			<otherwise>
+				<logger level="DEBUG" doc:name="Logger" doc:id="b8903cdf-feba-46ae-8feb-f462f097bbf4" message="Required input parameters were provided" category="commons.sfdcClient" />
+			</otherwise>
+		</choice>
+		<set-variable value='#[output java&#10;---&#10;{&#10;	system: vars.remoteCall.org,&#10;	service: {&#10;		"type": "sfdc",&#10;		name: vars.sfdcOperation.name&#10;	},&#10;	operation: vars.remoteCall.operation default vars.operationContext.name,&#10;	requestConfig: vars.remoteCall.requestConfig	&#10;}]' doc:name="remoteCall" doc:id="2cf2c27b-858a-461c-b88d-b7a5ed0f9e7f" variableName="remoteCall" />
+		<logger level="DEBUG" doc:name="Logger" doc:id="3a418843-7708-4a37-b81b-68ad6c5175cc" message="Standard remote call: #[output json --- vars.remoteCall]" category="commons.sfdcClient" />
+		<ee:transform doc:name="Transform Message" doc:id="74391d69-2f5d-48c9-b64e-fc5183624d63">
+			<ee:message>
+			</ee:message>
+			<ee:variables>
+				<ee:set-variable variableName="requestConfig"><![CDATA[%dw 2.0
+output application/java
+
+import * from modules::config::RemoteCallConfigUtils
+
+fun getKeyStorePath(remoteCall) = 
+  "keystores/sfdc/" ++ remoteCall.system ++ "-" ++ Mule::p("mule.env") ++ ".jks"
+  
+var system = vars.remoteCall.system
+var serviceType = vars.remoteCall.service."type"
+var serviceName = vars.remoteCall.service.name
+var operation = vars.remoteCall.operation default vars.operationContext.name
+---
+{
+    consumerKey: getProperty(serviceType, system, null, operation, 'consumerKey', true, vars.remoteCall.requestConfig.consumerKey, true),
+    keyStorePath: getKeyStorePath(vars.remoteCall),
+    keyStorePassword: getProperty(serviceType, system, null, operation, 'keyStorePassword', true, vars.remoteCall.requestConfig.keyStorePassword, true),
+    certAlias: getProperty(serviceType, system, null, operation, 'certAlias', true, vars.remoteCall.requestConfig.certAlias, false),
+    principal: getProperty(serviceType, system, null, operation, 'principal', true, vars.remoteCall.requestConfig.principal, false),
+    tokenEndpoint: getProperty(serviceType, system, null, operation, 'tokenEndpoint', true, vars.remoteCall.requestConfig.tokenEndpoint default "https://login.salesforce.com/services/oauth2/token", false),
+    audienceUrl: getProperty(serviceType, system, null, operation, 'audienceUrl', true, vars.remoteCall.requestConfig.audienceUrl default "https://login.salesforce.com", false),
+    gRPCHost: getProperty(serviceType, system, null, operation, 'gRPCHost', true, vars.remoteCall.requestConfig.gRPCHost default "api.pubsub.salesforce.com", false),
+    gRPCPort: getProperty(serviceType, system, null, operation, 'gRPCPort', true, vars.remoteCall.requestConfig.gRPCPort default "7443", false),
+    
+    
+    apexClass: getProperty(serviceType, system, null, operation, 'apexClass', false, vars.remoteCall.requestConfig.apexClass, false),
+    apexClassMethod: getProperty(serviceType, system, null, operation, 'apexClassMethod', false, vars.remoteCall.requestConfig.apexClassMethod, false),
+    query: getProperty(serviceType, system, null, operation, 'query', false, vars.remoteCall.requestConfig.query, false),
+    objectType: getProperty(serviceType, system, null, operation, 'objectType', false, vars.remoteCall.requestConfig.objectType, false),
+    externalIdFieldName: getProperty(serviceType, system, null, operation, 'externalIdFieldName', false, vars.remoteCall.requestConfig.externalIdFieldName, false),
+    platformEventName: getProperty(serviceType, system, null, operation, 'platformEventName', false, vars.remoteCall.requestConfig.platformEventName, false),
+    topic: getProperty(serviceType, system, null, operation, 'topic', false, vars.remoteCall.requestConfig.topic, false),
+    operation: getProperty(serviceType, system, null, operation, 'operation', false, vars.remoteCall.requestConfig.operation, false),
+    lineEnding: getProperty(serviceType, system, null, operation, 'lineEnding', false, vars.remoteCall.requestConfig.lineEnding default "LF", false),
+    columnDelimiter: getProperty(serviceType, system, null, operation, 'columnDelimiter', false, vars.remoteCall.requestConfig.columnDelimiter default "COMMA", false),
+    assignmentRuleId: getProperty(serviceType, system, null, operation, 'assignmentRuleId', false, vars.remoteCall.requestConfig.assignmentRuleId, false),
+	transientErrors: getPropertyAsArray(serviceType, system, null, operation, 'transientErrors', ',', true, 
+			getPropertyAsArray(serviceType, null, serviceName, null, 'transientErrors', ',', true, vars.remoteCall.requestConfig.transientErrors default [], false), false),
+	outboundTracking: {
+		enabled: getProperty(serviceType, system, null, operation, 'outboundTracking.enabled', false, 
+				getProperty(serviceType, null, serviceName, null, 'outboundTracking.enabled', true, vars.remoteCall.requestConfig.outboundTracking.enabled default true, false), false),
+		includeRequestPayload: getProperty(serviceType, system, null, operation, 'outboundTracking.includeRequestPayload', false, 
+				getProperty(serviceType, null, serviceName, null, 'outboundTracking.includeRequestPayload', true, vars.remoteCall.requestConfig.outboundTracking.includeRequestPayload default true, false), false),
+		includeResponsePayload: getProperty(serviceType, system, null, operation, 'outboundTracking.includeResponsePayload', false, 
+				getProperty(serviceType, null, serviceName, null, 'outboundTracking.includeResponsePayload', true, vars.remoteCall.requestConfig.outboundTracking.includeResponsePayload default true, false), false),
+		
+	}
+	
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<logger level="DEBUG" doc:name="Logger" doc:id="89debe52-58b4-4101-8a27-beb8edd5bb87" message="Request configuration loaded: #[output json --- {remoteCall: vars.remoteCall, requestConfig: vars.requestConfig}]" category="commons.sfdcClient" />
+		<ee:transform doc:name="Transform Message" doc:id="9bb19135-c88d-4bb7-9576-9e01c7eece6f" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="validationResult" ><![CDATA[import * from modules::sfdcClient::ValidationUtils
+---
+validateRequiredProperties(
+	vars.operationContext
+	, vars.sfdcOperation
+	, vars.remoteCall
+	, vars.requestConfig
+)]]></ee:set-variable>
+				<ee:set-variable variableName="remoteCall" ><![CDATA[%dw 2.0
+output application/java
+
+import * from dw::util::Values
+
+fun isPropertyUsed(sfdcOperation, propertyName) = do {
+	var usedProperties = 
+		   (sfdcOperation.configProperties.required default [])
+		++ (sfdcOperation.configProperties.optional default [])
+		++ (sfdcOperation.remoteCallProperties.required default [])
+		++ (sfdcOperation.remoteCallProperties.optional default [])
+---
+  ((usedProperties default []) contains propertyName) default false
+}
+  
+
+fun updateRequestConfig(sfdcOperation, remoteRequestConfig, requestConfig) = do
+{
+	var apexClass = remoteRequestConfig.apexClass default requestConfig.apexClass
+	var apexClassMethod = remoteRequestConfig.apexClassMethod default requestConfig.apexClassMethod
+	var query = remoteRequestConfig.query default requestConfig.query
+	var objectType = remoteRequestConfig.objectType default requestConfig.objectType
+	var externalIdFieldName = remoteRequestConfig.externalIdFieldName default requestConfig.externalIdFieldName
+	var platformEventName = remoteRequestConfig.platformEventName default requestConfig.platformEventName
+	var operation = remoteRequestConfig.operation default requestConfig.operation
+	var lineEnding = remoteRequestConfig.lineEnding default requestConfig.lineEnding
+	var columnDelimiter = remoteRequestConfig.columnDelimiter default requestConfig.columnDelimiter
+	var assignmentRuleId = remoteRequestConfig.assignmentRuleId default requestConfig.assignmentRuleId
+	
+	---
+	(remoteRequestConfig default {}) 
+	++	
+	{
+	    (apexClass: apexClass) if (isPropertyUsed(sfdcOperation, "apexClass")),
+	    (apexClassMethod: apexClassMethod) if (isPropertyUsed(sfdcOperation, "apexClassMethod")),
+	    (query: query) if (isPropertyUsed(sfdcOperation, "query")),
+	    (objectType: objectType) if (isPropertyUsed(sfdcOperation, "objectType")),
+	    (externalIdFieldName: externalIdFieldName) if (isPropertyUsed(sfdcOperation, "externalIdFieldName")),
+	    (platformEventName: platformEventName) if (isPropertyUsed(sfdcOperation, "platformEventName")),
+	    (operation: operation) if (isPropertyUsed(sfdcOperation, "operation")),
+	    (lineEnding: lineEnding) if (isPropertyUsed(sfdcOperation, "lineEnding")),
+	    (columnDelimiter: columnDelimiter) if (isPropertyUsed(sfdcOperation, "columnDelimiter")),
+	    (assignmentRuleId: assignmentRuleId) if (isPropertyUsed(sfdcOperation, "assignmentRuleId"))
+	}	
+}
+	
+
+var updatedRequestConfig = updateRequestConfig(vars.sfdcOperation, vars.remoteCall.requestConfig, vars.requestConfig)
+
+---
+if (!vars.remoteCall.requestConfig?)
+  (vars.remoteCall default {}) ++ {"requestConfig": updatedRequestConfig}
+else
+  vars.remoteCall update "requestConfig" with updatedRequestConfig]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<choice doc:name="Choice" doc:id="fc09640c-7d56-4ad8-bc3c-f56278a44d6d">
+			<when expression="#[!vars.validationResult.isValid]">
+				<raise-error doc:name="Raise APP:INVALID_REQUEST_CONFIG" doc:id="0870eb85-7f94-4098-83bc-90a8073cf528" type="APP:INVALID_REQUEST_CONFIG" description='#[vars.validationResult.message]' />
+			</when>
+			<otherwise>
+				<logger level="DEBUG" doc:name="Logger" doc:id="2af3e931-25f6-4168-903a-aeec33b2fd2b" message="Request config is valid" category="commons.sfdcClient" />
+			</otherwise>
+		</choice>
+	</sub-flow>
+	<sub-flow name="internal-before-sfdc-operation-call-subflow" doc:id="917ee517-d1bc-4ce3-ac53-b0db2e8a69e3" >
+		<set-variable value='#[output java&#10;&#10;import * from modules::sfdcClient::ObjectUtils&#10;&#10;---&#10;{&#10;	payload: {&#10;		requestConfig: vars.remoteCall.requestConfig default {},&#10;		requestBody: &#10;			if(vars.requestConfig.outboundTracking.includeRequestPayload default true)&#10;				toString(payload, "request body not available")&#10;			else "request payload omitted",	&#10;	},&#10;	timestamp: now()&#10;}]' doc:name="outboundRequest" doc:id="26ec7458-4a59-4390-813b-4a809a18f8cd" variableName="outboundRequest" />
+	</sub-flow>
+	<sub-flow name="internal-after-sfdc-operation-call-subflow" doc:id="5fcc64d9-bd63-4bd4-97c4-7d4c59abf72f" >
+		<choice doc:name="Choice" doc:id="64ba481d-9fd3-414a-9aa8-8d4b8543eabe" >
+			<when expression="#[vars.requestConfig.outboundTracking.enabled default true]" >
+				<set-variable value="#[output java&#10;&#10;import * from modules::sfdcClient::ObjectUtils  &#10;var code = if (isEmpty(error)) 0 else 999&#10;var completed = code == 0&#10;&#10;---&#10;{&#10;	code: code,&#10;	completed: completed,&#10;	payload:&#10;		if (completed)&#10;			if (vars.requestConfig.outboundTracking.includeResponsePayload default true)&#10;				toString(payload, 'response payload not available')&#10;			else&#10;  				&quot;response payload omitted&quot;&#10;		else	&#10;			'response payload not available',&#10;      timestamp: now()		  &#10;}]" doc:name="outboundResponse" doc:id="9a08ed2f-647d-4942-8f88-be49ef07b59e" variableName="outboundResponse" />
+				<flow-ref doc:name="Publish Outbound Tracking Event Subflow" doc:id="389e0ac3-eb13-432c-98a3-2edc6b3a7f58" name="publish-outbound-tracking-event-subflow" />
+			</when>
+			<otherwise >
+				<logger level="DEBUG" doc:name="Logger" doc:id="02c7d577-8c78-49d8-a9b9-0c18dc8d5a98" message="Outbount tracking event won't be published (oubountTrackingEvent.publish = false)" category="commons.sfdcClient" />
+			</otherwise>
+		</choice>
+	</sub-flow>
+	<sub-flow name="internal-raise-sfdc-operation-technical-error-subflow" doc:id="7590c81c-5f4b-42e9-8786-1884816db7f7" >
+		<logger level="DEBUG" doc:name="Logger" doc:id="1d12c1f9-1f4a-43dc-99d2-8491eb6236e7" message="Error: #[output json --- error]" category="commons.sfdcClient"/>
+		<flow-ref doc:name="After SFDC Operation" doc:id="98258b95-3ce7-4904-88f5-f1612cef6d67" name="internal-after-sfdc-operation-call-subflow" />
+		<ee:transform doc:name="Transform Message" doc:id="1a7b0299-cd49-45c6-ae26-e4886e56d5fa">
+						<ee:message>
+							<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+
+import * from modules::sfdcClient::ErrorUtils
+
+---
+{
+	message: getErrorMessage(vars.sfdcOperation, vars.requestConfig, error),
+	isTransient: checkIfTransient(error)
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+		<flow-ref doc:name="Raise Technical Error" doc:id="ab5b4209-21bf-4adc-bd91-9768bc864e3b" name="raise-technical-error-flow" />
+	</sub-flow>
+</mule>
