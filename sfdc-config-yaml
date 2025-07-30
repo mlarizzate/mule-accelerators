@@ -1,0 +1,101 @@
+# TODO olamiral: review how operation request payload will be structured:
+# - operationConfig + actual request payload
+# ex: query: payload request shoud be the query + params
+#  {meta: {}, payload: toString(payload)}
+# if not includeRequestPayload, set meta data only payload will be sent as omitted
+
+# TODO test outbound tracking after implementing the changes
+
+remote:
+  sfdc:
+    transientErrors: "SALESFORCE:CONNECTIVITY, SALESFORCE:TIMEOUT, SALESFORCE:COMMUNICATION, SALESFORCE:UNAVAILABLE"
+    
+    invokeApexRestMethod:
+      outboundTracking: 
+        includeRequestPayload: "true"
+        includeResponsePayload: "true"
+
+    invokeApexSoapMethod:
+      outboundTracking: 
+        includeRequestPayload: "true"
+        includeResponsePayload: "true"
+    
+    query:
+      outboundTracking: 
+        includeRequestPayload: "true"
+        includeResponsePayload: "false"
+        
+    create:
+      outboundTracking: 
+        includeRequestPayload: "true"
+        includeResponsePayload: "true"
+        
+    update:
+      outboundTracking: 
+        includeRequestPayload: "true"
+        includeResponsePayload: "true"
+        
+    upsert:
+      outboundTracking: 
+        includeRequestPayload: "true"
+        includeResponsePayload: "true"
+        
+    delete:
+      outboundTracking: 
+        includeRequestPayload: "true"
+        includeResponsePayload: "true"
+        
+    retrieve:
+      outboundTracking: 
+        includeRequestPayload: "true"
+        includeResponsePayload: "true"
+        
+    publishPlatformEventMessage:
+      outboundTracking: 
+        includeRequestPayload: "true"
+        includeResponsePayload: "true"
+        
+    getUserInfo:        
+      outboundTracking: 
+        includeRequestPayload: "true"
+        includeResponsePayload: "true"
+                
+    createJobBulkApiV2:
+      outboundTracking: 
+        includeRequestPayload: "false"
+        includeResponsePayload: "true"
+
+    abortJobBulkApiV2:
+      outboundTracking: 
+        includeRequestPayload: "true"
+        includeResponsePayload: "true"
+
+    deleteJobBulkApiV2:
+      outboundTracking: 
+        includeRequestPayload: "true"
+        includeResponsePayload: "true"
+
+    getAllJobBulkApiV2:
+      outboundTracking: 
+        includeRequestPayload: "true"
+        includeResponsePayload: "true"
+
+    getJobStateBulkApiV2:
+      outboundTracking: 
+        includeRequestPayload: "true"
+        includeResponsePayload: "true"
+
+    retrieveJobFailedResultsBulkApiV2:
+      outboundTracking: 
+        includeRequestPayload: "true"
+        includeResponsePayload: "false"
+
+    retrieveJobSuccessfulResultsBulkApiV2:
+      outboundTracking: 
+        includeRequestPayload: "true"
+        includeResponsePayload: "false"
+
+    retrieveJobUnprocessedResultsBulkApiV2:
+      outboundTracking: 
+        includeRequestPayload: "true"
+        includeResponsePayload: "false"
