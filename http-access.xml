@@ -1,0 +1,350 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+	<configuration-properties
+		doc:name="Configuration properties"
+		doc:id="b763b020-1a96-4bfd-bf50-bb271a7d8795"
+		file="config/commons-http-client-default.yaml" />
+	<import doc:name="Import"
+		doc:id="4a8aa9e3-7286-4cbf-ab89-48551d2435dc"
+		file="commons-error-handler.xml" />
+	<import doc:name="Import"
+		doc:id="0dc5db89-8424-4d59-b4de-944ac0fa8e5f"
+		file="commons-tracking.xml" />
+	<sub-flow name="execute-proxy-http-request-subflow" doc:id="e410abb9-ff78-494f-b759-95cedee5847f" >
+		<set-variable value='#[%dw 2.0&#10;import * from dw::util::Values&#10;output application/json&#10;&#10;fun addProxy(obj) = &#10;  (obj - "isProxy") ++ {isProxy: true}&#10;  ---&#10;if (vars.remoteCall.requestConfig?)&#10;  vars.remoteCall update "requestConfig" with addProxy(vars.remoteCall.requestConfig)&#10;else vars.remoteCall]' doc:name="remoteCall" doc:id="d63989fc-0736-445d-b750-34e33aeb0cc6" variableName="remoteCall"/>
+		<flow-ref doc:name="Execute HTTP Request" doc:id="6541887b-cba3-4939-ab39-bc2b42066b40" name="execute-http-request-subflow"/>
+	</sub-flow>
+	<sub-flow name="execute-http-request-subflow" doc:id="20c85936-855c-432c-8989-2dd69e9423e4" >
+		<flow-ref doc:name="Execute HTTP Request (Internal)" doc:id="92610742-8388-4ae1-8eb0-4319084c2a2d" name="internal-execute-http-request-subflow" />
+	</sub-flow>
+	<sub-flow name="internal-execute-http-request-subflow" doc:id="870e6660-4e56-4422-9af7-ce15cd3ea82f" >
+		<ee:transform doc:name="Transform Message" doc:id="f5c95b30-9264-4d98-bba7-a988cea03e4f" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="remoteCall" ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	system: vars.remoteCall.system,
+	service: {
+		"type": "http",
+		name: vars.remoteCall.service
+	},
+	operation: vars.remoteCall.operation default vars.operationContext.name,
+	requestConfig: vars.remoteCall.requestConfig
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<logger level="DEBUG" doc:name="Logger" doc:id="7931c7ec-0001-40f0-8e19-67094c715d42" message="Updated remoteCall: #[output json --- vars.remoteCall ]" category="commons.httpClient"/>
+		<flow-ref doc:name="Load Request Configs" doc:id="3b5e9c62-f712-47f4-b261-4e214d984a53" name="internal-load-http-request-config-subflow" />
+		<choice doc:name="Choice" doc:id="c53fdeaf-87c7-4ec6-991d-b00730506ace" >
+			<when expression="#[lower(vars.remoteCall.system) == 'mic']" >
+				<flow-ref doc:name="Execute MIC Remote Call" doc:id="24539f59-aeab-4e68-aebb-d08f0d166ca8" name="internal-execute-mic-remote-call-subflow" />
+			</when>
+			<otherwise >
+				<flow-ref doc:name="Execute Remote Call" doc:id="dfafcbc4-3e59-4e86-b5d7-d5d5c39f4dfc" name="internal-execute-remote-call-subflow" />
+			</otherwise>
+		</choice>
+	</sub-flow>
+	<sub-flow name="internal-execute-mic-remote-call-subflow" doc:id="cce41865-e0d4-4d2f-aa24-92d3ff910658" >
+		<set-variable value="#[output java&#10;import * from dw::util::Values&#10;var prefix = vars.requestConfig.micTransactionIdPrefix default &quot;MLT&quot;&#10;var txIdformat = &quot;'&quot; ++ prefix ++ &quot;'yyyyMMddHHmmssSSSSSS&quot;&#10;&#10;fun calculateMicTransactionId() =&#10;  (vars.requestConfig.micTransactionIdFormat default 'PREFIX_TIMESTAMP') match {&#10;    case &quot;UUID&quot; -&gt; uuid()&#10;    case &quot;PREFIX_UUID&quot; -&gt; prefix ++ uuid()&#10;    else -&gt; ((now() as String {format: txIdformat}) ++ &quot;_&quot; ++ randomInt(100))&#10;  } &#10;  &#10; &#10;fun update(operationContext) = do {&#10;	var transactionId = vars.requestConfig.headers.&quot;mic_transaction_id&quot;&#10;		default operationContext.transactionId&#10;		default (attributes.headers.&quot;mic_transaction_id&quot;&#10;		default calculateMicTransactionId())&#10;		&#10;	var processId = vars.requestConfig.headers.&quot;mic_process_id&quot;&#10;		default operationContext.processId&#10;		default attributes.headers.&quot;mic_process_id&quot;&#10;		default null&#10;	---&#10;	((operationContext default {}) -- [&quot;processId&quot;, &quot;transactionId&quot;]) ++ {		&#10;		&quot;processId&quot;: processId,&#10;		&quot;transactionId&quot;: transactionId&#10;	}&#10;}&#10;&#10; &#10;---&#10;update(vars.operationContext)]" doc:name="operationContext" doc:id="75d802d7-7c35-4bd4-a20e-9f378097cef2" variableName="operationContext" />
+		<logger level="DEBUG" doc:name="Logger" doc:id="4149efa2-5f70-4997-8d15-49a6c8a18a05" message="Updated operation context: #[output json --- vars.operationContext]" category="commons.httpClient"/>
+		<choice doc:name="Choice" doc:id="806e4cbd-06a8-4b6e-91b1-07d294756dc1">
+					<when expression="#[(&#10;	(lower(vars.requestConfig.&quot;responseMode&quot;) default &quot;sync&quot;) == &quot;async&quot;&#10;) and &#10;(&#10;	(vars.requestConfig.micTransactionIdFormat default 'PREFIX_TIMESTAMP') startsWith 'PREFIX_'&#10;	&#10;) and &#10;(&#10;	!(&#10;		vars.operationContext.transactionId startsWith (vars.requestConfig.micTransactionIdPrefix default &quot;MLT&quot;)&#10;	)&#10;)]">
+				<raise-error doc:name="Raise Invalid Transaction Id Prefix Error" doc:id="ab95d01d-82d0-443d-9c7e-902623f6115e" type="APP:INVALID_TRANSACTION_ID_PREFIX" description="#['Invalid transaction id provided in mic_transaction_id HTTP header. When provided, must start with $(vars.requestConfig.micTransactionIdPrefix)']" />
+					</when>
+				</choice>
+		<flow-ref doc:name="Enrich MIC Request" doc:id="b6cb887c-fd02-4f82-83f9-26f2f79f57ec" name="internal-enrich-mic-request-subflow" />
+		<try doc:name="Try" doc:id="7c57de2c-ad33-4290-84f9-08a5cae56702" >
+			<flow-ref doc:name="Execute Remote Call" doc:id="3cf30877-b2d0-424b-8939-8375572626bf" name="internal-execute-remote-call-subflow" />
+			<logger level="DEBUG" doc:name="Logger" doc:id="f8590e40-fb1c-454e-9229-1a2e6dfe5986" message="MIC Response headers: #[output json --- attributes]" category="commons.httpClient"/>
+			<flow-ref doc:name="Enrich MIC Response" doc:id="6695dc95-bd14-4671-93b7-21948c092f18" name="internal-enrich-mic-response-subflow" />
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="787bf010-1c15-4053-8125-c701b472cd4f" type="APP:REMOTE_SERVICE_EXCEPTION" when="#[import * from modules::httpClient::ObjectUtils --- isObject(payload) and payload.code?]">
+					<flow-ref doc:name="Enrich MIC Response" doc:id="35ce4f37-1b10-4a51-81e7-fffff41485f3" name="internal-enrich-mic-response-subflow" />
+					<ee:transform doc:name="Transform Message" doc:id="d18aaca9-0769-4805-8896-8934abc6ce4f" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+
+fun buildMessage(reason, message) = 
+  if (!isEmpty(reason))
+  	if (!isEmpty(message))
+  	  reason ++ ": " ++ message
+  	else reason	
+  else if(!isEmpty(message))
+    message
+  else 'Unknown business error'
+---
+{
+	code: payload.code,
+	message: buildMessage(payload.reason, payload.message),
+}]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<flow-ref doc:name="Raise Business Error" doc:id="ff87684b-c6e7-4d1f-88d5-87ad15ab9912" name="raise-business-error-flow" />
+				</on-error-continue>
+				<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="2bb4ad94-55bb-4dc3-9056-6d674210a6bb" >
+					<flow-ref doc:name="Enrich MIC Response" doc:id="ca151a37-9a6a-4a02-bc6d-da964f6ddcf4" name="internal-enrich-mic-response-subflow" />
+				</on-error-propagate>
+			</error-handler>
+		</try>
+	</sub-flow>
+	<sub-flow name="internal-load-http-request-config-subflow" doc:id="40047872-f1c4-4ffc-a2b6-cbc96f8181a2" >
+		<logger level="DEBUG" doc:name="Logger" doc:id="286a2116-630d-4436-84da-e7e466ec8251" message="Loading request confguration for API call config: #[output json --- vars.remoteCall]" category="commons.httpClient"/>
+		<set-variable value="#[fun validate(path, value) =&#10;{&#10;	isValid: !isEmpty(value),&#10;	path: path&#10;}&#10;&#10;fun consolidate(validations) = &#10;{&#10;	isValid: isEmpty((validations default []) filter !$.isValid),&#10;	invalidProperties: ((validations default []) filter !$.isValid).path joinBy &quot;, &quot;&#10;}&#10;&#10;---&#10;consolidate([&#10;	validate('remoteCall.system', vars.remoteCall.system),&#10;	validate('remoteCall.service', vars.remoteCall.service.name),&#10;	validate('operation (remoteCall.operation or operationContext.name)', vars.remoteCall.operation default vars.operationContext.name),		&#10;])]" doc:name="validationResult" doc:id="56d9d3bd-bacc-48d4-993d-18cc930604e5" variableName="validationResult"/>
+		<logger level="DEBUG" doc:name="Logger" doc:id="2ac20879-9a60-4b05-a816-29f5b969f5e5" category="commons.httpClient" message="Validation result: #[output json --- vars.validationResult]"/>
+		<choice doc:name="Choice" doc:id="6d96d546-619c-4b38-8a85-0a0dabf25565" >
+			<when expression="#[!vars.validationResult.isValid]" >
+				<raise-error doc:name="Raise APP:INVALID_REMOTE_CALL" doc:id="011c6a40-71cf-488a-8930-c4cdc0a8dbd8" type="APP:INVALID_REMOTE_CALL" description='#["Invalid Remote Call. The following remote call properties are missing:" ++ vars.validationResult.invalidProperties]' />
+			</when>
+			<otherwise >
+				<logger level="DEBUG" doc:name="Logger" doc:id="ef02a097-c61a-415c-9f72-61f92396b6a8" message="Required input parameters were provided" category="commons.httpClient"/>
+			</otherwise>
+		</choice>
+		<ee:transform doc:name="Transform Message" doc:id="80ff4fc8-f0c3-457a-b3ca-85796f818c05" >
+			<ee:message />
+			<ee:variables >
+				<ee:set-variable variableName="requestConfig" ><![CDATA[%dw 2.0
+output application/java
+
+import * from modules::config::RemoteCallConfigUtils
+import * from modules::httpClient::HttpUtils
+
+fun buildPath(basePath, resourcePath) = do {
+	
+	fun cleanUp(path) = 
+	  if (isEmpty(path)) path
+	  else
+	    path replace /\/+/ with '/'
+	
+	var adjustedBasePath = basePath default '/'
+	var absolutePath = 
+		if (isEmpty(resourcePath))
+		  adjustedBasePath
+		else
+		  adjustedBasePath ++ "/" ++ resourcePath  	
+	---
+	cleanUp(absolutePath)
+}
+
+fun buildUrl(protocol, host, port, path) = 
+  (protocol default 'https') 
+  ++ "://" ++ (host default '')
+  ++ ":" 
+  ++ (port default '443')
+  ++ path default ''
+    
+  
+var protocol = getProperty(vars.remoteCall, 'protocol', 'https')
+var host = getProperty(vars.remoteCall, 'host', 'undefined')
+var port = getProperty(vars.remoteCall, 'port', '443')
+var basePath = getProperty(vars.remoteCall, 'basePath', '')
+var resourcePath = getProperty(vars.remoteCall, 'relativePath', '')
+var absolutePath = buildPath(basePath, resourcePath)
+var excludedRequestHeaders = getPropertyAsArray(vars.remoteCall, 'excludedRequestHeaders', ',', [])
+
+---
+{
+	protocol: protocol,
+	host: host,
+	port: port,
+	basePath: basePath,
+	resourcePath: resourcePath,
+	absolutePath: absolutePath,
+	url: buildUrl(protocol, host, port, absolutePath),
+	method: getProperty(vars.remoteCall, 'method', attributes.method),
+	micTransactionIdFormat: getProperty(vars.remoteCall, 'micTransactionIdFormat', 'PREFIX_TIMESTAMP'),
+	micTransactionIdPrefix: getProperty(vars.remoteCall, 'transactionIdPrefix', 'MLT'),
+	micCorrelationIdField: getProperty(vars.remoteCall, 'correlationIdField', 'idCorrelationSpwA'),
+	apiKey: getSecureProperty(vars.remoteCall, 'apiKey', 'undefined'), // convert to secure property after tests
+	channel: getProperty(vars.remoteCall, 'channel', 'undefined'), // convert to secure property after tests
+	isProxy: getProperty(vars.remoteCall, 'isProxy', vars.remoteCall.requestConfig.isProxy default false) as Boolean,
+	excludedRequestHeaders: excludedRequestHeaders,
+	excludedResponseHeaders: getPropertyAsArray(vars.remoteCall, 'excludedResponseHeaders', ',', []),
+	responseTimeoutInMillis: getProperty(vars.remoteCall, 'responseTimeoutInMillis', 10000),
+	responseMode: getProperty(vars.remoteCall, 'responseMode', 'sync'),
+	transientErrors: getPropertyAsArray(vars.remoteCall, 'transientErrors', ',', []),	
+	transientStatusCodes: ((getPropertyAsArray(vars.remoteCall, 'transientStatusCodes', ',', ["408", "429", "502", "503", "504"])) map ($ as Number)),
+	headers: removeHeaders(vars.remoteCall.requestConfig.headers default (attributes.headers default {}), excludedRequestHeaders),
+	uriParams: vars.remoteCall.requestConfig.uriParams default (attributes.uriParams default {}),
+	queryParams: vars.remoteCall.requestConfig.queryParams default (attributes.queryParams default {}),
+	outboundTracking: {
+		enabled: getProperty(vars.remoteCall, 'outboundTracking.enabled', lower(vars.remoteCall.system) != 'mic'),
+		includeRequestPayload: getProperty(vars.remoteCall, 'outboundTracking.includeRequestPayload', true),
+		includeResponsePayload: getProperty(vars.remoteCall, 'outboundTracking.includeResponsePayload', true)
+	}
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<logger level="DEBUG" doc:name="Logger" doc:id="a842d43d-89fc-4259-9256-0ed0ea6bdedc" message="Request configuration loaded: #[output json --- vars.requestConfig]" category="commons.httpClient"/>
+		<choice doc:name="Choice" doc:id="ef476c3d-e028-43e9-a332-423376ab1c31" >
+			<when expression="#[isEmpty(vars.requestConfig.host) or (vars.requestConfig.host == 'undefined')]" >
+				<raise-error doc:name="Raise APP:INVALID_REQUEST_CONFIG" doc:id="dd19ac81-2e5c-4842-9859-2643f46c74ec" type="APP:INVALID_REQUEST_CONFIG" description="Invalid request config: 'host' property not configured" />
+			</when>
+		</choice>
+	</sub-flow>
+	<sub-flow name="internal-enrich-mic-request-subflow" doc:id="5cc533ad-6335-428a-a548-4a6377b54da6" >
+		<ee:transform doc:name="Transform Message" doc:id="e8222d8d-2471-4b45-b13d-425df93189ee" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+
+import * from dw::Runtime
+import * from modules::httpClient::ObjectUtils
+
+var micCorrelationIdField = vars.requestConfig.micCorrelationIdField default 'idCorrelationSpwA'
+
+fun updateCorrId(obj, corrId) = 
+  (obj - micCorrelationIdField) ++ {(micCorrelationIdField): corrId}
+
+var result=try(() -> isObject(payload))
+---
+if (result.success and result.result)
+  if (payload.methodStdSPWithAttch?)
+    payload - "methodStdSPWithAttch" 
+        ++ {"methodStdSPWithAttch": updateCorrId(payload.methodStdSPWithAttch, vars.operationContext.transactionId) }
+  else
+    payload
+else
+  null    
+]]></ee:set-payload>
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="requestConfig" ><![CDATA[%dw 2.0
+output application/java
+---
+(vars.requestConfig default {} - "headers") 
+++ {
+	"headers":
+		((vars.requestConfig.headers default {}) -- ["mic_process_id", "mic_transaction_id"]) ++ {
+			"mic_api_key": vars.requestConfig.headers."mic_api_key" default vars.requestConfig.apiKey,
+			"mic_channel": vars.requestConfig.headers."mic_channel" default vars.requestConfig.channel,
+			"mic_process_id": vars.operationContext.processId,
+			"mic_transaction_id": vars.operationContext.transactionId
+		}
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+	</sub-flow>
+	<sub-flow name="internal-enrich-mic-response-subflow" doc:id="0376badd-df7d-421a-838f-9b2595017034" >
+		<ee:transform doc:name="Transform Message" doc:id="bff66eb0-71b9-4c73-bf67-2cba0d494f81" >
+			<ee:message />
+			<ee:variables >
+				<ee:set-variable variableName="outboundHeaders" ><![CDATA[output json skipNullOn="everywhere"
+---
+(vars.outboundHeaders default {})
+++
+{
+	"mic-transaction-id": vars.operationContext.transactionId,
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+	</sub-flow>
+	<sub-flow name="internal-execute-remote-call-subflow" doc:id="f8b85044-e424-46cc-b178-f66cb4753cd4" >
+		<logger level="DEBUG" doc:name="Logger" doc:id="5e08eb30-1c54-4efb-9e52-780c4405fff9" message="Executing HTTP request with request config: #[output json --- {operationContext: vars.operationContext, remoteCall: vars.remoteCall, requestConfig: vars.requestConfig}]" category="commons.httpClient"/>
+		<try doc:name="Try" doc:id="f18a0acc-fb04-4b27-ac3a-c9b2846970ff" >
+			<set-variable value='#[output java&#10;&#10;import * from modules::httpClient::ObjectUtils&#10;&#10;---&#10;{&#10;	payload: &#10;		if(vars.requestConfig.outboundTracking.includeRequestPayload default true)&#10;			toString(payload, "request body not available")&#10;		else "request payload omitted",&#10;	timestamp: now()&#10;}]' doc:name="outboundRequest" doc:id="1f3aa214-41b7-4e71-b93b-ceaf8c390d47" variableName="outboundRequest"/>
+			<http:request method="#[vars.requestConfig.method]" doc:name="Request" doc:id="bf467140-9cce-4df2-8a04-f51fe39311c7" url="#[vars.requestConfig.url]" responseTimeout="#[vars.requestConfig.responseTimeoutInMillis]">
+				<http:headers><![CDATA[#[vars.requestConfig.headers default {}]]]></http:headers>
+				<http:uri-params><![CDATA[#[vars.requestConfig.uriParams default {}]]]></http:uri-params>
+				<http:query-params><![CDATA[#[vars.requestConfig.queryParams default {}]]]></http:query-params>
+			</http:request>
+			<flow-ref doc:name="Publish HTTP Tracking Event" doc:id="c560f86b-62c9-4a15-8d1f-73afff65f4b1" name="internal-publish-http-tracking-event-subflow"/>
+			<error-handler >
+				<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="189eabad-b5d8-4597-9969-6140b0e64cfe" >
+					<flow-ref doc:name="Publish HTTP Tracking Event" doc:id="f603e3be-dfb9-44ca-8b46-62208a215c3d" name="internal-publish-http-tracking-event-subflow" />
+					<choice doc:name="Error contains an HTTP Status Code?" doc:id="3947331c-4b26-45e9-a035-2dfb2c159b57" >
+						<when expression="#[error.errorMessage.attributes.statusCode?]">
+							<ee:transform doc:name="Transform Message" doc:id="9f5809df-b1a2-4baf-bad1-b5a290e5428f">
+						<ee:message>
+							<ee:set-payload><![CDATA[error.errorMessage.payload]]></ee:set-payload>
+									<ee:set-attributes ><![CDATA[error.errorMessage.attributes]]></ee:set-attributes>
+						</ee:message>
+								<ee:variables >
+									<ee:set-variable variableName="outboundHeaders" ><![CDATA[import * from modules::httpClient::HttpUtils
+---
+removeHeaders(error.errorMessage.attributes.headers, vars.requestConfig.excludedResponseHeaders)]]></ee:set-variable>
+								</ee:variables>
+					</ee:transform>
+							<choice doc:name="Proxy operation?" doc:id="47fb9f31-71f2-422c-addb-585fe2e4fc2e">
+								<when expression="#[!(vars.requestConfig.isProxy default false)]">
+									<choice doc:name="HTTP status code transient?" doc:id="7c4652a3-77bd-47bb-9a76-cd43ca7dfd32">
+										<when expression="#[(vars.requestConfig.transientStatusCodes default []) contains error.errorMessage.attributes.statusCode]">
+											<ee:transform doc:name="Transform Message" doc:id="45c44bcb-bdf0-4b86-be7f-b167aa5d0de8">
+												<ee:message>
+													<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+{
+	message: "The remote service returned a transient error",
+	isTransient: true,
+}]]></ee:set-payload>
+												</ee:message>
+											</ee:transform>
+											<flow-ref doc:name="Raise Technical Error" doc:id="ce113482-7d86-449b-996d-1ff100217365" name="raise-technical-error-flow" />
+										</when>
+										<otherwise >
+											<raise-error doc:name="Raise Remote Service Error" doc:id="90f0f565-5839-4e6c-8438-90f4a2ee60f1" type="APP:REMOTE_SERVICE_EXCEPTION" description="The remote service returned a non-transient error"/>
+										</otherwise>
+									</choice>
+								</when>
+								<otherwise>
+									<logger level="DEBUG" doc:name="Logger" doc:id="4cbdb1c6-db22-4388-8beb-4a3dd4d1312e" message="Remote service returned an error for a proxy operation. Remote response will be returned as-is." category="commons.httpClient"/>
+								</otherwise>
+							</choice>
+						</when>
+						<otherwise >
+							<ee:transform doc:name="Transform Message" doc:id="eef9a0b2-08a7-407b-a187-cfc5c2c441ae">
+								<ee:message>
+									<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+{
+	message: "An error occurred while calling the remote service"
+}]]></ee:set-payload>
+								</ee:message>
+							</ee:transform>
+							<flow-ref doc:name="Raise Technical Error" doc:id="ba2f8ffd-8574-4385-9a76-67d74d9e5df8" name="raise-technical-error-flow"/>
+						</otherwise>
+					</choice>
+				</on-error-continue>
+			</error-handler>
+		</try>
+		<choice doc:name="Choice" doc:id="a1ed02c2-b21a-47d0-bded-5b618f4809e5" >
+			<when expression="#[vars.requestConfig.isProxy]">
+				<ee:transform doc:name="Transform Message" doc:id="b6b6bb5f-979d-4edb-af5e-8b1a92668e82" >
+					<ee:message >
+					</ee:message>
+					<ee:variables >
+						<ee:set-variable variableName="outboundHeaders" ><![CDATA[import * from modules::httpClient::HttpUtils
+---
+removeHeaders(attributes.headers, vars.requestConfig.excludedResponseHeaders)
+]]></ee:set-variable>
+						<ee:set-variable variableName="httpStatus" ><![CDATA[attributes.statusCode]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+			</when>
+		</choice>
+	</sub-flow>
+	<sub-flow name="internal-publish-http-tracking-event-subflow" doc:id="a6164df3-87eb-4c09-aad2-030c8add25b4" >
+		<choice doc:name="Choice" doc:id="dc4aabf3-afeb-40b0-878a-e2744c9ef37e" >
+			<when expression="#[vars.requestConfig.outboundTracking.enabled default (lower(vars.remoteCall.system) != 'mic')]">
+				<set-variable value="#[output java&#10;&#10;import * from modules::httpClient::ObjectUtils  &#10;var code = error.errorMessage.attributes.statusCode default attributes.statusCode&#10;var completed = code != null&#10;&#10;---&#10;{&#10;	code: code default 999,&#10;	completed: completed,&#10;	payload:&#10;		if (completed)&#10;			if (code &lt; 400)&#10;				if (vars.requestConfig.outboundTracking.includeResponsePayload)&#10;				    toString(payload, 'response payload not available')&#10;				else&#10;  					&quot;response payload omitted&quot;&#10;			else&#10;			  toString(error.errorMessage.payload, 'response payload not available')	&#10;		else	&#10;			'response payload not available',&#10;      timestamp: now()		  &#10;}]" doc:name="outboundResponse" doc:id="bdcf825f-d741-4171-8d56-3d09fdf2a4c3" variableName="outboundResponse" />
+				<flow-ref doc:name="Publish Outbound Tracking Event Subflow" doc:id="1568e2ca-d24d-4cf9-b05b-4bf3cb537b97" name="publish-outbound-tracking-event-subflow" />
+			</when>
+			<otherwise >
+				<logger level="DEBUG" doc:name="Logger" doc:id="7fab9c96-98a3-4935-8c15-9d67bbe57bfd" message="Outbount tracking event won't be published (oubountTrackingEvent.publish = false)" category="commons.httpClient"/>
+			</otherwise>
+		</choice>
+	</sub-flow>
+</mule>
