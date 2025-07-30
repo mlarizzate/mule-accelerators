@@ -1,0 +1,104 @@
+fun validatePropertyValue(propertyName, propertyValue) =
+{
+	isValid: !isEmpty(propertyValue),
+	propertyName: propertyName
+}
+
+fun validateRequiredProperties(lookupPaths, configObjects, requiredProperties) =
+	{
+		lookupPaths: lookupPaths,		
+		validations: 
+			if (!isEmpty(requiredProperties))
+				(requiredProperties default []) map 
+  					validatePropertyValue($, (configObjects reduce ($ ++ $$))[$])
+  			else 
+  				[
+  					{
+  						isValid: true
+  					}
+  				]
+	}			
+
+
+fun consolidate(validationResult) = do {
+	var consolidatedValidationResult = ((validationResult map {
+    lookupPaths: $.lookupPaths joinBy  ', ',
+    isValid: isEmpty($.validations filter (!$.isValid)),
+    invalidProperties: ($.validations filter (!$.isValid)).propertyName joinBy ", "
+}) filter (!$.isValid))
+	---
+	{
+    	isValid: isEmpty(consolidatedValidationResult),
+    	message: (
+    		consolidatedValidationResult map 
+        		(
+        			"[" ++ 
+	        			(if (isEmpty($.lookupPaths))
+    	        			$.invalidProperties
+        				else
+          				"Invalid properties: " ++ $.invalidProperties ++ ". Lookup paths: " ++ $.lookupPaths) 
+          			++ "]"
+	          	)
+		) joinBy  ", "
+    }
+}
+
+
+fun validateRemoteCallOperation(operationContext, remoteCall) =
+{		
+	validations: [
+		{
+  			isValid: (!isEmpty(remoteCall.operation) or !isEmpty(operationContext.name)),
+			propertyName: "At least vars.remoteCall.operation or vars.operationContext.name must be provided"		  			
+  		}
+  	]
+}			
+
+
+
+fun validateRemoteCallProperties(operationContext, sfdcOperation, remoteCall) = do {
+	
+	var remoteCallOrgLookupPaths = [
+		"vars.remoteCall"		
+	]
+	var remoteCallOperationLookupPaths = [
+		"vars.remoteCall.operation",
+		"vars.operationContext.name"				
+	]
+	var requestConfigLookupPaths = [
+		"vars.remoteCall.requestConfig"
+	]
+    ---    
+     consolidate(
+         [
+           (validateRequiredProperties(remoteCallOrgLookupPaths, [remoteCall default {}], ["org"])),
+            (validateRemoteCallOperation(operationContext, remoteCall)),
+            (validateRequiredProperties(requestConfigLookupPaths, [remoteCall.requestConfig default {}], sfdcOperation.remoteCallProperties.required))]
+    )
+	
+}
+
+fun validateRequiredProperties(operationContext, sfdcOperation, remoteCall, requestConfig) = do { 
+	var propsLookupPaths =  [
+		"{remote." ++ remoteCall.service."type" ++ "." ++ remoteCall.system ++ "." ++ (remoteCall.operation default operationContext.name) ++ "}",
+		"{remote." ++ remoteCall.service."type" ++ "." ++ remoteCall.service.name ++ "}"
+	]
+	
+	var remoteCallLookupPaths = [
+		"{remote." ++ remoteCall.service."type" ++ "." ++ remoteCall.system ++ "." ++ (remoteCall.operation default operationContext.name) ++ "}",		
+		"vars.remoteCall.requestConfig"
+	]
+	
+	var requiredProperties = [
+	    'consumerKey', 'keyStorePath', 'keyStorePassword', 'certAlias', 'principal', 'tokenEndpoint'		
+	]
+		
+	---
+  consolidate(
+  		[
+  			validateRequiredProperties(propsLookupPaths, [requestConfig default {}], requiredProperties),
+  			validateRequiredProperties(remoteCallLookupPaths, [requestConfig default {}, remoteCall.requestConfig default {}], sfdcOperation.configProperties.required default []),
+  			
+  		]
+  )
+}
